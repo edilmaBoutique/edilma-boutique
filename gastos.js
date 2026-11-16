@@ -1,5 +1,5 @@
 /* =========================================================
-   GASTOS E INVESTIMENTOS — ZER01 (fase 1)
+   GASTOS E INVESTIMENTOS — EDILMA BOUTIQUE (fase 1)
    - Despesas da loja (com categoria, "a pagar" e recorrentes).
    - Compras de peças (lotes): item, quantidade, custo e venda.
    - Resultado do período e lucro projetado por lote/item.

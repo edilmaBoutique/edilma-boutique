@@ -1,5 +1,5 @@
 /* =========================================================
-   AUMENTO DE LIMITE NO ATO DA VENDA — ZER01
+   AUMENTO DE LIMITE NO ATO DA VENDA — EDILMA BOUTIQUE
    - Limite efetivo = limite aprovado + aumentos temporários ativos.
    - Se a venda não cabe no limite disponível, abre a tela para
      o operador escolher:
@@ -152,7 +152,7 @@
               <input type="radio" name="limit-type" value="permanente">
               <span>
                 <strong>Aumento permanente</strong>
-                <small>O limite aprovado do cliente passa a ser o novo valor e fica registrado no Zer01 Score.</small>
+                <small>O limite aprovado do cliente passa a ser o novo valor e fica registrado no Edilma Score.</small>
               </span>
             </label>
           </div>

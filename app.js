@@ -1,6 +1,6 @@
 
 /* =========================================================
-   APP.JS — SISTEMA ZER01
+   APP.JS — EDILMA BOUTIQUE
    Persistência:
    - Não usa localStorage para dados do sistema.
    - Toda leitura/gravação de dados passa pelo Supabase.

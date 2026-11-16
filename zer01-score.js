@@ -1,5 +1,5 @@
 /* =========================================================
-   ZER01 SCORE — análise interna de crédito
+   EDILMA SCORE — análise interna de crédito
    ========================================================= */
 
 let scoreRows = [];
@@ -224,8 +224,8 @@ async function loadZer01Score() {
     document.getElementById('score-count').textContent = `${computed.length} clientes`;
     document.getElementById('score-overdue').textContent = computed.filter(x=>x.overdueCount>0).length;
   } catch (error) {
-    console.error('[ZER01 SCORE] Falha ao carregar/calcular:', error);
-    toast(`${error.message || 'Não foi possível carregar o Zer01 Score.'} Confira se a migração SQL foi executada.`, 'error');
+    console.error('[EDILMA SCORE] Falha ao carregar/calcular:', error);
+    toast(`${error.message || 'Não foi possível carregar o Edilma Score.'} Confira se a migração SQL foi executada.`, 'error');
   } finally {
     if (refresh) refresh.disabled = false;
   }
@@ -352,7 +352,7 @@ async function saveCreditDecision(id) {
     closeScoreModal();
     await loadZer01Score();
   } catch(error) {
-    console.error('[ZER01 SCORE] Falha ao salvar decisão:', error);
+    console.error('[EDILMA SCORE] Falha ao salvar decisão:', error);
     toast(error.message || 'Não foi possível registrar a decisão. Verifique as permissões e a migração SQL.', 'error');
     if (button) { button.disabled = false; button.textContent = 'Registrar decisão'; }
   }
@@ -375,9 +375,9 @@ async function issueCustomerCard(id) {
 
 function showCustomerCard(cliente, card) {
   document.getElementById('score-modal').innerHTML = `<div class="score-overlay"><section class="score-modal score-card-modal">
-    <header><div><span class="eyebrow">CARTÃO ZER01</span><h2>Identificação do cliente</h2></div><button class="icon-btn" id="score-close">×</button></header>
+    <header><div><span class="eyebrow">CARTÃO EDILMA</span><h2>Identificação do cliente</h2></div><button class="icon-btn" id="score-close">×</button></header>
     <div class="zer01-card-print" id="zer01-card-print">
-      <div class="zer01-card-brand">ZER<span>01</span><small>CLIENTE</small></div>
+      <div class="zer01-card-brand">EDIL<span>MA</span><small>CLIENTE</small></div>
       <div class="zer01-card-name">${scoreSafe(cliente.nome)}</div>
       <div class="zer01-card-label">CARTÃO DE IDENTIFICAÇÃO</div>
       <svg id="zer01-barcode"></svg>

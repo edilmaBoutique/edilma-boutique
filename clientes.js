@@ -1,5 +1,5 @@
 /* =========================================================
-   CLIENTES — SISTEMA ZER01
+   CLIENTES — EDILMA BOUTIQUE
    Cadastro, edição, dívida existente e exclusão.
    Fonte única de dados: Supabase
    ========================================================= */

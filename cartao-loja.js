@@ -1,5 +1,5 @@
 /* =========================================================
-   CARTÃO DA LOJA — ZER01
+   CARTÃO DA LOJA — EDILMA BOUTIQUE
    - Identifica o cliente pelo código do cartão (digitado,
      leitor de código de barras USB/Bluetooth ou câmera).
    - Mostra a tela com dados do cliente, status do cartão e

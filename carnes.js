@@ -15,7 +15,6 @@
     let resumoPorCliente = {};   /* cliente_id -> { aberto, atraso, nAtraso, proximo } */
     let filtro = "carnes";       /* carnes | sem | todos */
     let busca = "";
-    let diagnosticoTexto = "";
 
     const el = id => document.getElementById(id);
 
@@ -69,15 +68,10 @@
             });
             const corpo = await resposta.json().catch(() => null);
             if (!resposta.ok || !corpo || !Array.isArray(corpo.carnes)) {
-                const erroApi = new Error(
+                throw new Error(
                     (corpo && corpo.erro) ||
                     "A API do carnê (/api/cobranca) não respondeu."
                 );
-                /* a API respondeu, mas recusou: problema de configuração */
-                erroApi.daApi = Boolean(corpo && corpo.erro);
-                erroApi.diagnostico = corpo && corpo.diagnostico;
-                erroApi.http = resposta.status;
-                throw erroApi;
             }
             return corpo.carnes;
         } catch (erro) {
@@ -92,36 +86,11 @@
             .eq("ativo", true)
             .order("criado_em", { ascending: true }));
 
-        if (falhaApi) {
-            const d = falhaApi.diagnostico;
-            const meuProjeto = String(
-                (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL) || ""
-            ).replace(/^https?:\/\//, "").split(".")[0];
-            const linhas = [
-                "HTTP " + (falhaApi.http || "sem resposta") + " — " + falhaApi.message,
-                "Projeto Supabase do login (navegador): " + (meuProjeto || "?"),
-                "Projeto Supabase da API (Vercel): " + ((d && d.projetoSupabase) || "?")
-            ];
-            if (d && d.tentativas) {
-                d.tentativas.forEach(t => linhas.push(
-                    "Validação com chave " + t.chave + ": HTTP " + t.status +
-                    (t.mensagem ? " — " + t.mensagem : "")));
-                if (!d.tentativas.length) {
-                    linhas.push("Nenhuma tentativa de validação (sem token ou sem chaves).");
-                }
-            }
-            diagnosticoTexto = linhas.join("\n");
-            console.warn("[carnes] diagnóstico:\n" + diagnosticoTexto);
-        }
-
         if (!direto.length) {
             toast(
                 "Não foi possível listar os carnês: " +
                 (falhaApi && falhaApi.message ? falhaApi.message : "erro na API do carnê") +
-                (falhaApi && falhaApi.daApi
-                    ? " Confira as variáveis de ambiente do projeto na Vercel " +
-                      "(CARNE_SECRET, SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY) e faça um novo deploy."
-                    : " Abra o sistema pelo endereço publicado na Vercel."),
+                " Abra o sistema pelo endereço publicado na Vercel.",
                 "error"
             );
         }
@@ -238,12 +207,7 @@
                     ? "Nenhum carnê encontrado."
                     : "Nenhum cliente encontrado.";
             el("carnes-table").innerHTML =
-                '<tr><td colspan="7" class="empty">' + msg +
-                (diagnosticoTexto
-                    ? '<pre style="text-align:left;white-space:pre-wrap;margin:14px auto 0;max-width:720px;font-size:12px;color:var(--muted)">' +
-                      escapar("Diagnóstico:\n" + diagnosticoTexto) + "</pre>"
-                    : "") +
-                "</td></tr>";
+                '<tr><td colspan="7" class="empty">' + msg + "</td></tr>";
             return;
         }
 

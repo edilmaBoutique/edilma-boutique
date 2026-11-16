@@ -39,7 +39,7 @@
 .card-limit-available { display: grid; gap: 6px; }
 .card-limit-available strong { font: 700 30px 'Space Grotesk', sans-serif; }
 .card-limit-bar { height: 8px; margin-top: 12px; border-radius: 99px; background: #121416; overflow: hidden; }
-.card-limit-bar span { display: block; height: 100%; background: var(--amber, #d60c0c); border-radius: 99px; }
+.card-limit-bar span { display: block; height: 100%; background: var(--amber, #c9a86c); border-radius: 99px; }
 
 .card-sale-check { margin-bottom: 12px; padding: 11px 13px; border-radius: 8px; font-size: 13px; line-height: 1.4; }
 .card-sale-check.ok { color: var(--green, #4ed19b); background: rgba(78, 209, 155, .1); }
@@ -53,7 +53,7 @@
 .card-scan-card { width: min(520px, 100%); }
 .card-scan-view { position: relative; overflow: hidden; border-radius: 10px; background: #000; aspect-ratio: 4 / 3; }
 .card-scan-view video { width: 100%; height: 100%; object-fit: cover; }
-.card-scan-line { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; background: var(--amber, #d60c0c); box-shadow: 0 0 12px var(--amber, #d60c0c); }
+.card-scan-line { position: absolute; left: 8%; right: 8%; top: 50%; height: 2px; background: var(--amber, #c9a86c); box-shadow: 0 0 12px var(--amber, #c9a86c); }
 
 @media (max-width: 720px) {
   .card-modal-grid.three { grid-template-columns: 1fr; }

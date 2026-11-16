@@ -1,5 +1,5 @@
 /* =========================================================
-   AUTENTICAÇÃO — SISTEMA ZER01
+   AUTENTICAÇÃO — EDILMA BOUTIQUE
    ========================================================= */
 
 
@@ -9,12 +9,12 @@
 
 const USUARIOS_ZER01 = {
 
-    'edilmaboutique02@gmail.com': {
+    'barbadosearrumados02@gmail.com': {
         perfil: 'administrador',
         nome: 'Administrador'
     },
 
-    'edilmaboutique03@gmail.com': {
+    'contatestewgs05@gmail.com': {
         perfil: 'vendedor',
         nome: 'Vendedor'
     }
