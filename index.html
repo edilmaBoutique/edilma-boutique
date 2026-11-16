@@ -1,0 +1,2283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZER01 - Carnê</title>
+
+<!--
+  PÁGINA PÚBLICA DO CLIENTE (carnê digital e pagamento de parcela)
+
+  Os links já enviados aos clientes continuam exatamente iguais:
+    /?carne=CODIGO   -> carnê digital (dados ao vivo do sistema)
+    /?token=TOKEN    -> pagamento de uma parcela / cobrança antiga
+
+  Sem nenhum desses parâmetros esta página é apenas a porta de entrada
+  do sistema e envia para o dashboard (como o index.html antigo fazia).
+  O painel administrativo do carnê agora é o próprio sistema da loja.
+-->
+<script>
+(function () {
+    var p = new URLSearchParams(window.location.search);
+    if (!p.get("carne") && !p.get("token")) {
+        window.location.replace("dashboard.html");
+    }
+})();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:0;
+    background:#0d0d0d;
+    color:#fff;
+    font-family:Arial,Helvetica,sans-serif;
+}
+
+#paginaGerador{
+    min-height:100vh;
+    padding:30px 15px;
+}
+
+.container{
+    width:100%;
+    max-width:720px;
+    margin:auto;
+    background:#171717;
+    border:1px solid #292929;
+    border-radius:16px;
+    padding:30px;
+    box-shadow:0 10px 40px rgba(0,0,0,.4);
+}
+
+.logo{
+    display:block;
+    max-width:220px;
+    max-height:90px;
+    margin:0 auto 25px;
+    object-fit:contain;
+}
+
+h1{
+    text-align:center;
+    margin:0 0 8px;
+    font-size:28px;
+}
+
+.subtitulo{
+    text-align:center;
+    color:#aaa;
+    margin-bottom:28px;
+}
+
+.campo{
+    margin-bottom:17px;
+}
+
+.campo label{
+    display:block;
+    margin-bottom:7px;
+    font-weight:bold;
+    font-size:14px;
+}
+
+.campo input,
+.campo textarea{
+    width:100%;
+    border:1px solid #363636;
+    background:#0f0f0f;
+    color:#fff;
+    border-radius:9px;
+    padding:13px;
+    font-size:16px;
+    outline:none;
+}
+
+.campo input:focus,
+.campo textarea:focus{
+    border-color:#777;
+}
+
+.campo textarea{
+    min-height:75px;
+    resize:vertical;
+}
+
+.linha{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:15px;
+}
+
+.botao{
+    width:100%;
+    border:0;
+    border-radius:10px;
+    padding:16px;
+    background:#fff;
+    color:#000;
+    font-size:17px;
+    font-weight:bold;
+    cursor:pointer;
+    margin-top:8px;
+}
+
+.botao:hover{
+    opacity:.9;
+}
+
+.botao:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+}
+
+/* =========================================================
+   BOTÃO VOLTAR AO PAINEL
+========================================================= */
+
+.botao-voltar-painel {
+    display: block !important;
+    width: 100%;
+    margin: 0 0 18px;
+    padding: 13px 16px;
+
+    border: 1px solid #333;
+    border-radius: 8px;
+
+    background: #222;
+    color: #fff;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    cursor: pointer;
+    text-align: center;
+
+    box-sizing: border-box;
+}
+
+.botao-voltar-painel:hover {
+    background: #292929;
+}
+
+.botao-voltar-painel:active {
+    transform: scale(.99);
+}
+
+.info{
+    background:#101010;
+    border:1px solid #292929;
+    border-radius:10px;
+    padding:14px;
+    color:#aaa;
+    font-size:13px;
+    margin-top:20px;
+    line-height:1.5;
+}
+
+#carregando{
+    display:none;
+    text-align:center;
+    margin-top:18px;
+    color:#ccc;
+}
+
+#paginaPagamento{
+    display:none;
+    min-height:100vh;
+    padding:25px 15px;
+}
+
+.pagamento{
+    width:100%;
+    max-width:600px;
+    margin:auto;
+    background:#171717;
+    border:1px solid #292929;
+    border-radius:16px;
+    padding:25px;
+}
+
+.pagamento .logo{
+    margin-bottom:15px;
+}
+
+.pagamento h1{
+    margin-bottom:5px;
+}
+
+.status{
+    text-align:center;
+    color:#aaa;
+    margin-bottom:25px;
+}
+
+.resumo{
+    border:1px solid #333;
+    border-radius:12px;
+    overflow:hidden;
+    margin-bottom:20px;
+}
+
+.item{
+    display:flex;
+    justify-content:space-between;
+    gap:15px;
+    padding:14px;
+    border-bottom:1px solid #292929;
+}
+
+.item:last-child{
+    border-bottom:0;
+}
+
+.item span:first-child{
+    color:#aaa;
+}
+
+.item strong{
+    text-align:right;
+}
+
+.total{
+    background:#222;
+    font-size:20px;
+}
+
+.total strong{
+    font-size:23px;
+}
+
+.qr-area{
+    background:#fff;
+    border-radius:12px;
+    padding:20px;
+    text-align:center;
+    margin-top:20px;
+}
+
+#qrPagamento{
+    width:240px;
+    height:240px;
+    margin:auto;
+}
+
+#qrPagamento img{
+    width:240px !important;
+    height:240px !important;
+}
+
+.pix-box{
+    margin-top:20px;
+}
+
+.pix-box label{
+    display:block;
+    color:#aaa;
+    margin-bottom:7px;
+    font-size:13px;
+}
+
+.pix-code{
+    background:#0c0c0c;
+    border:1px solid #333;
+    border-radius:9px;
+    padding:12px;
+    word-break:break-all;
+    font-size:12px;
+    line-height:1.4;
+    color:#ddd;
+}
+
+.copiar{
+    width:100%;
+    margin-top:10px;
+    padding:13px;
+    border:0;
+    border-radius:8px;
+    background:#fff;
+    color:#000;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.erro{
+    background:#260d0d;
+    border:1px solid #602020;
+    padding:15px;
+    border-radius:10px;
+    color:#ffb3b3;
+    text-align:center;
+}
+
+.rodape{
+    text-align:center;
+    color:#777;
+    font-size:12px;
+    margin-top:25px;
+}
+
+@media(max-width:600px){
+    .container,
+    .pagamento{
+        padding:20px;
+    }
+
+    .linha{
+        grid-template-columns:1fr;
+        gap:0;
+    }
+}
+
+/* =========================================================
+   ZER01 — CARNÊ DIGITAL
+========================================================= */
+
+#paginaCarneDigital {
+    min-height:100vh;
+    padding:20px 14px 40px;
+    background:#0d0d0d;
+    box-sizing:border-box;
+}
+
+.carne-digital-container {
+    width:100%;
+    max-width:850px;
+    margin:0 auto;
+}
+
+.carne-digital-header {
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:20px 0 25px;
+    border-bottom:1px solid #292929;
+    margin-bottom:22px;
+}
+
+.carne-digital-logo {
+    width:160px;
+    max-height:70px;
+    object-fit:contain;
+}
+
+.carne-digital-header h1 {
+    margin:0 0 5px;
+    font-size:22px;
+    font-weight:800;
+    color:#fff;
+}
+
+.carne-digital-header p {
+    margin:0;
+    color:#999;
+    font-size:13px;
+}
+
+.carne-digital-loading {
+    padding:50px 20px;
+    text-align:center;
+    color:#999;
+}
+
+.carne-digital-erro {
+    padding:18px;
+    border:1px solid rgba(255,70,70,.25);
+    border-radius:10px;
+    background:rgba(255,70,70,.08);
+    color:#ff7777;
+    text-align:center;
+}
+
+.carne-cliente-box {
+    background:#171717;
+    border:1px solid #2b2b2b;
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:15px;
+}
+
+.carne-cliente-box span {
+    display:block;
+    color:#777;
+    font-size:11px;
+    font-weight:700;
+    margin-bottom:6px;
+}
+
+.carne-cliente-box strong {
+    display:block;
+    color:#fff;
+    font-size:21px;
+    margin-bottom:8px;
+}
+
+.carne-cliente-box small {
+    display:block;
+    color:#999;
+    font-size:13px;
+    margin-top:3px;
+}
+
+.carne-resumo {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:12px;
+    margin-bottom:18px;
+}
+
+.carne-resumo-card {
+    background:#171717;
+    border:1px solid #2b2b2b;
+    border-radius:12px;
+    padding:18px;
+}
+
+.carne-resumo-card span {
+    display:block;
+    color:#777;
+    font-size:10px;
+    font-weight:700;
+    margin-bottom:8px;
+}
+
+.carne-resumo-card strong {
+    color:#fff;
+    font-size:20px;
+}
+
+.carne-parcelas-box {
+    background:#171717;
+    border:1px solid #2b2b2b;
+    border-radius:12px;
+    overflow:hidden;
+}
+
+.carne-secao-titulo {
+    padding:20px;
+    border-bottom:1px solid #2b2b2b;
+}
+
+.carne-secao-titulo h2 {
+    margin:0 0 5px;
+    font-size:18px;
+    color:#fff;
+}
+
+.carne-secao-titulo span {
+    color:#777;
+    font-size:12px;
+}
+
+.carne-lista-parcelas {
+    padding:12px;
+}
+
+.carne-parcela {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:15px;
+    padding:16px;
+    margin-bottom:10px;
+    background:#101010;
+    border:1px solid #292929;
+    border-radius:10px;
+}
+
+.carne-parcela:last-child {
+    margin-bottom:0;
+}
+
+.carne-parcela-info {
+    min-width:0;
+}
+
+.carne-parcela-numero {
+    color:#fff;
+    font-size:14px;
+    font-weight:800;
+    margin-bottom:5px;
+}
+
+.carne-parcela-data {
+    color:#888;
+    font-size:12px;
+}
+
+.carne-parcela-valor {
+    text-align:right;
+}
+
+.carne-parcela-valor strong {
+    display:block;
+    color:#fff;
+    font-size:17px;
+    margin-bottom:7px;
+}
+
+.carne-status {
+    display:inline-block;
+    padding:5px 8px;
+    border-radius:5px;
+    font-size:9px;
+    font-weight:800;
+}
+
+.carne-status-aberta {
+    background:#222;
+    color:#fff;
+}
+
+.carne-status-atrasada {
+    background:#3a1717;
+    color:#ff7070;
+}
+
+.carne-status-paga {
+    background:#18351f;
+    color:#70d98a;
+}
+
+.carne-btn-pagar {
+    border:0;
+    border-radius:7px;
+    padding:9px 13px;
+    background:#fff;
+    color:#000;
+    font-size:11px;
+    font-weight:800;
+    cursor:pointer;
+}
+
+.carne-btn-pagar:hover {
+    opacity:.9;
+}
+
+.carne-footer {
+    display:flex;
+    justify-content:space-between;
+    gap:15px;
+    margin-top:20px;
+    padding:18px 5px;
+    color:#777;
+    font-size:11px;
+}
+
+.carne-footer strong {
+    color:#aaa;
+}
+
+.carne-vazia {
+    padding:35px 20px;
+    text-align:center;
+    color:#777;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media(max-width:600px) {
+
+    #paginaCarneDigital {
+        padding:12px 10px 30px;
+    }
+
+    .carne-digital-header {
+        gap:12px;
+        padding:12px 0 18px;
+    }
+
+    .carne-digital-logo {
+        width:110px;
+    }
+
+    .carne-digital-header h1 {
+        font-size:16px;
+    }
+
+    .carne-digital-header p {
+        font-size:11px;
+    }
+
+    .carne-resumo {
+        grid-template-columns:1fr;
+    }
+
+    .carne-resumo-card {
+        padding:14px;
+    }
+
+    .carne-parcela {
+        align-items:flex-start;
+        flex-direction:column;
+    }
+
+    .carne-parcela-valor {
+        width:100%;
+        text-align:left;
+    }
+
+    .carne-btn-pagar {
+        width:100%;
+    }
+
+    .carne-footer {
+        flex-direction:column;
+    }
+
+}
+
+@media(max-width:500px){
+
+    #paginaLogin {
+        padding:15px;
+    }
+
+    .login-box {
+        padding:25px 20px;
+    }
+
+    .login-title {
+        font-size:21px;
+    }
+
+}
+</style>
+</head>
+
+<body>
+
+<div id="paginaCarneDigital" style="display:none;">
+    <div class="carne-digital-container">
+
+        <div class="carne-digital-header">
+
+            <img
+                src="logoTitulo.png"
+                class="carne-digital-logo"
+                alt="ZER01"
+            >
+
+            <div>
+                <h1>ZER01 - MODA MASCULINA</h1>
+
+                <p>
+                    Carnê Digital
+                </p>
+            </div>
+
+        </div>
+
+
+        <!-- CARREGANDO -->
+
+        <div
+            id="carneDigitalCarregando"
+            class="carne-digital-loading"
+        >
+            Carregando carnê...
+        </div>
+
+
+        <!-- ERRO -->
+
+        <div
+            id="carneDigitalErro"
+            class="carne-digital-erro"
+            style="display:none;"
+        ></div>
+
+
+        <!-- CONTEÚDO -->
+
+        <div
+            id="carneDigitalConteudo"
+            style="display:none;"
+        >
+
+            <!-- CLIENTE -->
+
+            <div class="carne-cliente-box">
+
+                <span>CLIENTE</span>
+
+                <strong
+                    id="carneClienteNome"
+                >
+                    -
+                </strong>
+
+                <small
+                    id="carneClienteDocumento"
+                >
+                    -
+                </small>
+
+                <small
+                    id="carneClienteTelefone"
+                >
+                    -
+                </small>
+
+            </div>
+
+
+            <!-- RESUMO -->
+
+            <div class="carne-resumo">
+
+                <div class="carne-resumo-card">
+
+                    <span>
+                        TOTAL EM ABERTO
+                    </span>
+
+                    <strong
+                        id="carneTotalAberto"
+                    >
+                        R$ 0,00
+                    </strong>
+
+                </div>
+
+
+                <div class="carne-resumo-card">
+
+                    <span>
+                        PARCELAS
+                    </span>
+
+                    <strong
+                        id="carneQuantidadeParcelas"
+                    >
+                        0
+                    </strong>
+
+                </div>
+
+
+                <div class="carne-resumo-card">
+
+                    <span>
+                        ATRASADAS
+                    </span>
+
+                    <strong
+                        id="carneQuantidadeAtrasadas"
+                    >
+                        0
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <!-- PARCELAS -->
+
+            <div class="carne-parcelas-box">
+
+                <div class="carne-secao-titulo">
+
+                    <h2>
+                        Suas parcelas
+                    </h2>
+
+                    <span>
+                        Selecione uma parcela para pagar
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="carneListaParcelas"
+                    class="carne-lista-parcelas"
+                ></div>
+
+            </div>
+
+
+            <div class="carne-footer">
+
+                <strong>
+                    ZER01 MODA MASCULINA
+                </strong>
+
+                <span>
+                    Tel.: (43) 9 9678-8303
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<div id="paginaPagamento">
+
+    <div class="pagamento">
+
+        <img src="logoTitulo.png" class="logo">
+
+        <h1>Pagamento</h1>
+
+        <div class="status" id="statusPagamento">
+            Carregando cobrança...
+        </div>
+
+        <div id="conteudoPagamento"></div>
+
+        <div class="rodape">
+            ZER01 MODA MASCULINA<br>
+            Tel.: (43) 9 9678-8303
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function formatarTelefone(valor){
+
+    let n = String(valor || "")
+        .replace(/\D/g,"")
+        .slice(0,11);
+
+    if(!n){
+        return "";
+    }
+
+    if(n.length <= 2){
+        return "(" + n;
+    }
+
+    if(n.length <= 6){
+        return "(" + n.slice(0,2) + ") " +
+            n.slice(2);
+    }
+
+    if(n.length <= 10){
+        return "(" + n.slice(0,2) + ") " +
+            n.slice(2,6) + "-" +
+            n.slice(6);
+    }
+
+    return "(" + n.slice(0,2) + ") " +
+        n.slice(2,7) + "-" +
+        n.slice(7);
+}
+
+function formatarMoeda(valor){
+
+    return Number(valor || 0).toLocaleString(
+        "pt-BR",
+        {
+            style:"currency",
+            currency:"BRL"
+        }
+    );
+}
+
+
+/* =========================================================
+   DATA
+========================================================= */
+
+function formatarData(data){
+
+    if(!data){
+        return "";
+    }
+
+    const partes = data.split("-");
+
+    if(partes.length !== 3){
+        return data;
+    }
+
+    return partes[2] + "/" +
+        partes[1] + "/" +
+        partes[0];
+}
+
+
+/* =========================================================
+   ADICIONAR MESES
+========================================================= */
+
+function escaparHTML(valor){
+
+    return String(valor || "")
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
+
+/* =========================================================
+   ZER01 — PAINEL ADMINISTRATIVO
+========================================================= */
+
+function gerarPix(chave, valor) {
+
+    function campo(id, valor) {
+
+        valor = String(valor);
+
+        return (
+            id +
+            valor.length.toString().padStart(2, "0") +
+            valor
+        );
+    }
+
+
+    function crc16(payload) {
+
+        let crc = 0xFFFF;
+
+        for (let i = 0; i < payload.length; i++) {
+
+            crc ^= payload.charCodeAt(i) << 8;
+
+            for (let j = 0; j < 8; j++) {
+
+                if (crc & 0x8000) {
+
+                    crc =
+                        ((crc << 1) ^ 0x1021) &
+                        0xFFFF;
+
+                } else {
+
+                    crc =
+                        (crc << 1) &
+                        0xFFFF;
+                }
+            }
+        }
+
+        return crc
+            .toString(16)
+            .toUpperCase()
+            .padStart(4, "0");
+    }
+
+
+    /* =========================================
+       CHAVE PIX
+    ========================================= */
+
+    chave = String(chave || "").trim();
+
+
+    if (!chave) {
+        throw new Error(
+            "Chave PIX não cadastrada."
+        );
+    }
+
+
+    /* =========================================
+       VALOR
+    ========================================= */
+
+    const valorNumerico =
+        Number(valor);
+
+
+    if (
+        !Number.isFinite(valorNumerico) ||
+        valorNumerico <= 0
+    ) {
+
+        throw new Error(
+            "Valor do PIX inválido."
+        );
+    }
+
+
+    const valorFormatado =
+        valorNumerico.toFixed(2);
+
+
+    /* =========================================
+       MERCHANT ACCOUNT INFORMATION
+    ========================================= */
+
+    const merchantAccountInformation =
+        campo(
+            "00",
+            "BR.GOV.BCB.PIX"
+        ) +
+        campo(
+            "01",
+            chave
+        );
+
+
+    /* =========================================
+       PAYLOAD PIX
+    ========================================= */
+
+    let payload = "";
+
+
+    /* Payload Format Indicator */
+
+    payload += campo(
+        "00",
+        "01"
+    );
+
+
+    /* Merchant Account Information */
+
+    payload += campo(
+        "26",
+        merchantAccountInformation
+    );
+
+
+    /* Merchant Category Code */
+
+    payload += campo(
+        "52",
+        "0000"
+    );
+
+
+    /* Transaction Currency */
+
+    payload += campo(
+        "53",
+        "986"
+    );
+
+
+    /* Transaction Amount */
+
+    payload += campo(
+        "54",
+        valorFormatado
+    );
+
+
+    /* Country Code */
+
+    payload += campo(
+        "58",
+        "BR"
+    );
+
+
+    /* Merchant Name */
+
+    payload += campo(
+        "59",
+        "ZER01"
+    );
+
+
+    /* Merchant City */
+
+    payload += campo(
+        "60",
+        "LONDRINA"
+    );
+
+
+    /* =========================================
+       ADDITIONAL DATA FIELD
+    ========================================= */
+
+    const campo62 =
+        campo(
+            "05",
+            "***"
+        );
+
+
+    payload += campo(
+        "62",
+        campo62
+    );
+
+
+    /* =========================================
+       CRC
+    ========================================= */
+
+    payload += "6304";
+
+
+    const crc =
+        crc16(payload);
+
+
+    return payload + crc;
+}
+
+
+/* =========================================================
+   COPIAR PIX
+========================================================= */
+
+async function copiarPix(){
+
+    if(!window.pixAtual){
+        return;
+    }
+
+
+    try{
+
+        await navigator.clipboard.writeText(
+            window.pixAtual
+        );
+
+
+        const botao =
+            document.querySelector(
+                ".copiar"
+            );
+
+
+        if(botao){
+
+            const textoOriginal =
+                botao.innerText;
+
+
+            botao.innerText =
+                "PIX COPIADO!";
+
+
+            setTimeout(
+                function(){
+
+                    botao.innerText =
+                        textoOriginal;
+
+                },
+                2000
+            );
+        }
+
+
+    }catch(e){
+
+        alert(
+            "Não foi possível copiar automaticamente. Selecione o código PIX manualmente."
+        );
+    }
+}
+
+
+/* =========================================================
+   SEGURANÇA HTML
+========================================================= */
+
+async function abrirPaginaPagamento(token){
+
+    const login =
+        document.getElementById("paginaLogin");
+
+    const admin =
+        document.getElementById("paginaAdmin");
+
+    const gerador =
+        document.getElementById("paginaGerador");
+
+    const pagamento =
+        document.getElementById("paginaPagamento");
+
+    const carneDigital =
+        document.getElementById("paginaCarneDigital");
+
+
+    if (login) {
+        login.style.display = "none";
+    }
+
+    if (admin) {
+        admin.style.display = "none";
+    }
+
+    if (gerador) {
+        gerador.style.display = "none";
+    }
+
+    if (pagamento) {
+        pagamento.style.display = "block";
+    }
+
+    if (carneDigital) {
+        carneDigital.style.display = "none";
+    }
+
+
+    const status =
+        document.getElementById("statusPagamento");
+
+    const conteudo =
+        document.getElementById("conteudoPagamento");
+
+
+    status.innerText = "Validando cobrança...";
+
+
+    try{
+
+        const resposta =
+            await fetch(
+                "/api/cobranca?token=" +
+                encodeURIComponent(token)
+            );
+
+
+        const resultado =
+            await resposta.json();
+
+
+        if(
+            !resposta.ok ||
+            !resultado.sucesso
+        ){
+
+            throw new Error(
+                resultado.erro ||
+                "Cobrança inválida."
+            );
+        }
+
+
+        const dados =
+            resultado.dados;
+
+        console.log(
+            "DADOS DA COBRANÇA:",
+            dados
+        );
+        
+        console.log(
+            "MULTA:",
+            dados.multa
+        );
+        
+        console.log(
+            "JUROS:",
+            dados.juros
+        );
+        
+        console.log(
+            "VENCIMENTO:",
+            dados.vencimento
+        );
+
+        const vencimento =
+            new Date(
+                dados.vencimento +
+                "T23:59:59"
+            );
+
+
+        const agora =
+            new Date();
+
+
+/* =================================================
+   CÁLCULO DOS DIAS DE ATRASO
+   Conta dias de calendário, e não 24h completas.
+================================================= */
+
+        let diasAtraso = 0;
+        
+        
+        const inicioHoje =
+            new Date(
+                agora.getFullYear(),
+                agora.getMonth(),
+                agora.getDate()
+            );
+        
+        
+        const inicioVencimento =
+            new Date(
+                vencimento.getFullYear(),
+                vencimento.getMonth(),
+                vencimento.getDate()
+            );
+        
+        
+        if (inicioHoje > inicioVencimento) {
+        
+            const diferenca =
+                inicioHoje.getTime() -
+                inicioVencimento.getTime();
+        
+            diasAtraso =
+                Math.floor(
+                    diferenca /
+                    (
+                        1000 *
+                        60 *
+                        60 *
+                        24
+                    )
+                );
+        
+        }
+        
+        
+        if (diasAtraso < 0) {
+            diasAtraso = 0;
+        }
+        
+        
+        console.log(
+            "DIAS DE ATRASO CALCULADOS:",
+            diasAtraso
+        );
+
+
+        const valorOriginal =
+            Number(dados.valor || 0);
+        console.log(
+            "DIAS DE ATRASO CALCULADOS:",
+            diasAtraso
+        );
+
+        let valorMulta = 0;
+        let valorJuros = 0;
+
+
+        if(diasAtraso > 0){
+
+            valorMulta =
+                valorOriginal *
+                (
+                    Number(dados.multa || 0) /
+                    100
+                );
+
+
+            valorJuros =
+                valorOriginal *
+                (
+                    Number(dados.juros || 0) /
+                    100
+                ) *
+                diasAtraso;
+        }
+
+
+        valorMulta =
+            Math.round(
+                valorMulta * 100
+            ) / 100;
+
+
+        valorJuros =
+            Math.round(
+                valorJuros * 100
+            ) / 100;
+
+
+        const valorTotal =
+            Math.round(
+                (
+                    valorOriginal +
+                    valorMulta +
+                    valorJuros
+                ) * 100
+            ) / 100;
+
+
+        /* =================================================
+           PIX
+        ================================================= */
+
+        const pixCopiaECola =
+            gerarPix(
+                dados.pix,
+                valorTotal
+            );
+
+
+        const qrContainer =
+            document.createElement("div");
+
+        qrContainer.style.position =
+            "absolute";
+
+        qrContainer.style.left =
+            "-99999px";
+
+        document.body.appendChild(
+            qrContainer
+        );
+
+
+        new QRCode(
+            qrContainer,
+            {
+                text:pixCopiaECola,
+                width:500,
+                height:500,
+                correctLevel:
+                    QRCode.CorrectLevel.M
+            }
+        );
+
+
+        await new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    300
+                )
+        );
+
+
+        const canvas =
+            qrContainer.querySelector(
+                "canvas"
+            );
+
+
+        const qrData =
+            canvas.toDataURL(
+                "image/png"
+            );
+
+
+        document.body.removeChild(
+            qrContainer
+        );
+
+
+        /* =================================================
+           EXIBIR
+        ================================================= */
+
+        status.innerText =
+            diasAtraso > 0
+                ? "Esta parcela está em atraso."
+                : "Parcela em dia.";
+
+
+        let html = "";
+
+
+        html += `
+            <div class="resumo">
+
+                <div class="item">
+                    <span>Cliente</span>
+                    <strong>
+                        ${escaparHTML(
+                            dados.cliente || "-"
+                        )}
+                    </strong>
+                </div>
+
+                <div class="item">
+                    <span>Parcela</span>
+                    <strong>
+                        ${escaparHTML(
+                            dados.parcela || "-"
+                        )}
+                    </strong>
+                </div>
+
+                <div class="item">
+                    <span>Vencimento</span>
+                    <strong>
+                        ${formatarData(
+                            dados.vencimento
+                        )}
+                    </strong>
+                </div>
+
+                ${
+                    dados.telefone
+                    ?
+                    `
+                    <div class="item">
+                        <span>Telefone</span>
+                        <strong>
+                            ${escaparHTML(
+                                formatarTelefone(
+                                    dados.telefone
+                                )
+                            )}
+                        </strong>
+                    </div>
+                    `
+                    :
+                    ""
+                }
+
+                ${
+                    diasAtraso > 0
+                    ?
+                    `
+                    <div class="item">
+                        <span>Dias em atraso</span>
+                        <strong>
+                            ${diasAtraso}
+                        </strong>
+                    </div>
+
+                    <div class="item">
+                        <span>Valor original</span>
+                        <strong>
+                            ${formatarMoeda(
+                                valorOriginal
+                            )}
+                        </strong>
+                    </div>
+
+                    <div class="item">
+                        <span>Multa</span>
+                        <strong>
+                            ${formatarMoeda(
+                                valorMulta
+                            )}
+                        </strong>
+                    </div>
+
+                    <div class="item">
+                        <span>Juros</span>
+                        <strong>
+                            ${formatarMoeda(
+                                valorJuros
+                            )}
+                        </strong>
+                    </div>
+                    `
+                    :
+                    ""
+                }
+
+                <div class="item total">
+                    <span>Total para pagamento</span>
+                    <strong>
+                        ${formatarMoeda(
+                            valorTotal
+                        )}
+                    </strong>
+                </div>
+
+            </div>
+        `;
+
+
+        html += `
+            <div class="qr-area">
+
+                <img
+                    src="${qrData}"
+                    style="
+                        width:240px;
+                        height:240px;
+                        display:block;
+                        margin:auto;
+                    "
+                >
+
+                <div
+                    style="
+                        color:#111;
+                        font-weight:bold;
+                        margin-top:12px;
+                    "
+                >
+                    PIX
+                </div>
+
+                <div
+                    style="
+                        color:#555;
+                        font-size:13px;
+                        margin-top:5px;
+                    "
+                >
+                    Escaneie o QR Code para pagar
+                    ${formatarMoeda(valorTotal)}.
+                </div>
+
+            </div>
+        `;
+
+
+        html += `
+            <div class="pix-box">
+
+                <label>
+                    PIX COPIA E COLA
+                </label>
+
+                <div
+                    class="pix-code"
+                    id="pixCodigo"
+                >
+                    ${escaparHTML(
+                        pixCopiaECola
+                    )}
+                </div>
+
+                <button
+                    class="copiar"
+                    onclick="copiarPix()"
+                >
+                    COPIAR PIX
+                </button>
+
+            </div>
+        `;
+
+
+        conteudo.innerHTML = html;
+
+
+        window.pixAtual =
+            pixCopiaECola;
+
+
+    }catch(erro){
+
+        console.error(erro);
+
+        status.innerText = "";
+
+        conteudo.innerHTML = `
+            <div class="erro">
+                ${
+                    escaparHTML(
+                        erro.message ||
+                        "Não foi possível carregar esta cobrança."
+                    )
+                }
+            </div>
+        `;
+    }
+}
+
+
+/* =========================================================
+   PIX BR CODE
+========================================================= */
+
+async function abrirPaginaCarne(codigo) {
+
+    const login =
+        document.getElementById("paginaLogin");
+
+    const admin =
+        document.getElementById("paginaAdmin");
+
+    const gerador =
+        document.getElementById("paginaGerador");
+
+    const pagamento =
+        document.getElementById("paginaPagamento");
+
+    const carnePagina =
+        document.getElementById("paginaCarneDigital");
+
+
+    if (login) {
+        login.style.display = "none";
+    }
+
+    if (admin) {
+        admin.style.display = "none";
+    }
+
+    if (gerador) {
+        gerador.style.display = "none";
+    }
+
+    if (pagamento) {
+        pagamento.style.display = "none";
+    }
+
+    if (carnePagina) {
+        carnePagina.style.display = "block";
+    }
+
+
+    await carregarCarneDigital(codigo);
+
+}
+
+
+/* =========================================================
+   CARREGAR CARNÊ
+========================================================= */
+
+async function carregarCarneDigital(codigo) {
+
+    const carregando =
+        document.getElementById(
+            "carneDigitalCarregando"
+        );
+
+    const erro =
+        document.getElementById(
+            "carneDigitalErro"
+        );
+
+    const conteudo =
+        document.getElementById(
+            "carneDigitalConteudo"
+        );
+
+
+    carregando.style.display =
+        "block";
+
+    erro.style.display =
+        "none";
+
+    conteudo.style.display =
+        "none";
+
+
+    try {
+
+        const resposta =
+            await fetch(
+                `/api/cobranca?carne=${encodeURIComponent(codigo)}`
+            );
+
+
+        const resultado =
+            await resposta.json();
+
+
+        if (!resposta.ok) {
+
+            throw new Error(
+                resultado?.erro ||
+                resultado?.error ||
+                "Não foi possível carregar o carnê."
+            );
+
+        }
+
+
+        console.log(
+            "Carnê recebido:",
+            resultado
+        );
+
+
+        /* =================================================
+           CLIENTE
+        ================================================= */
+
+        const cliente =
+            resultado.cliente ||
+            resultado.clienteData ||
+            {};
+
+
+        document.getElementById(
+            "carneClienteNome"
+        ).textContent =
+            cliente.nome ||
+            resultado.nome ||
+            "Cliente";
+
+
+        document.getElementById(
+            "carneClienteDocumento"
+        ).textContent =
+            cliente.cpf_cnpj
+                ? "CPF/CNPJ: " +
+                  cliente.cpf_cnpj
+                : "";
+
+
+        document.getElementById(
+            "carneClienteTelefone"
+        ).textContent =
+            cliente.telefone
+                ? "Telefone: " +
+                  cliente.telefone
+                : "";
+
+
+        /* =================================================
+           PARCELAS
+        ================================================= */
+
+        const parcelas =
+            resultado.parcelas ||
+            resultado.data?.parcelas ||
+            [];
+
+
+        const lista =
+            document.getElementById(
+                "carneListaParcelas"
+            );
+
+
+        lista.innerHTML = "";
+
+
+        let totalAberto = 0;
+        let atrasadas = 0;
+        let abertas = 0;
+
+
+        if (
+            !parcelas ||
+            parcelas.length === 0
+        ) {
+
+            lista.innerHTML = `
+                <div class="carne-vazia">
+                    Nenhuma parcela encontrada.
+                </div>
+            `;
+
+        } else {
+
+            parcelas.forEach(
+                parcela => {
+
+                    const valor =
+                        Number(
+                            parcela.valor ||
+                            parcela.valor_original ||
+                            0
+                        );
+
+
+                    const valorPago =
+                        Number(
+                            parcela.valor_pago ||
+                            0
+                        );
+
+
+                    const saldo =
+                        Math.max(
+                            valor -
+                            valorPago,
+                            0
+                        );
+
+
+                    const status =
+                        String(
+                            parcela.status ||
+                            ""
+                        )
+                        .toLowerCase()
+                        .normalize("NFD")
+                        .replace(
+                            /[\u0300-\u036f]/g,
+                            ""
+                        );
+
+
+                    const paga =
+                        status.includes("pago") ||
+                        status.includes("quitado") ||
+                        saldo <= 0;
+
+
+                    let atrasada =
+                        false;
+
+
+                    if (
+                        parcela.vencimento &&
+                        !paga
+                    ) {
+
+                        const hoje =
+                            new Date();
+
+                        const vencimento =
+                            new Date(
+                                parcela.vencimento +
+                                "T23:59:59"
+                            );
+
+
+                        atrasada =
+                            vencimento <
+                            hoje;
+
+                    }
+
+
+                    if (!paga) {
+
+                        abertas++;
+
+                        totalAberto +=
+                            saldo;
+
+                    }
+
+
+                    if (atrasada) {
+                        atrasadas++;
+                    }
+
+
+                    let statusTexto =
+                        "EM ABERTO";
+
+                    let statusClasse =
+                        "carne-status-aberta";
+
+
+                    if (paga) {
+
+                        statusTexto =
+                            "PAGA";
+
+                        statusClasse =
+                            "carne-status-paga";
+
+                    } else if (atrasada) {
+
+                        statusTexto =
+                            "ATRASADA";
+
+                        statusClasse =
+                            "carne-status-atrasada";
+
+                    }
+
+
+                    const numero =
+                        parcela.numero ||
+                        "";
+
+
+                    const vencimento =
+                        parcela.vencimento
+                            ? formatarData(
+                                parcela.vencimento
+                            )
+                            : "-";
+
+
+                    const div =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    div.className =
+                        "carne-parcela";
+
+
+                    div.innerHTML = `
+
+                        <div class="carne-parcela-info">
+
+                            <div class="carne-parcela-numero">
+
+                                Parcela ${numero}
+
+                            </div>
+
+                            <div class="carne-parcela-data">
+
+                                Vencimento:
+                                ${vencimento}
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="carne-parcela-valor">
+
+                            <strong>
+
+                                ${formatarMoeda(
+                                    saldo
+                                )}
+
+                            </strong>
+
+
+                            <span
+                                class="carne-status ${statusClasse}"
+                            >
+
+                                ${statusTexto}
+
+                            </span>
+
+                        </div>
+
+
+                        ${
+                            !paga
+                            ?
+                            `
+                            <button
+                                class="carne-btn-pagar"
+                                onclick="abrirPagamentoParcela('${escaparHTML(String(parcela.id || ""))}')"
+                            >
+                                PAGAR
+                            </button>
+                            `
+                            :
+                            ""
+                        }
+
+                    `;
+
+
+                    lista.appendChild(
+                        div
+                    );
+
+                }
+            );
+
+        }
+
+
+        /* =================================================
+           RESUMO
+        ================================================= */
+
+        document.getElementById(
+            "carneTotalAberto"
+        ).textContent =
+            formatarMoeda(
+                totalAberto
+            );
+
+
+        document.getElementById(
+            "carneQuantidadeParcelas"
+        ).textContent =
+            abertas;
+
+
+        document.getElementById(
+            "carneQuantidadeAtrasadas"
+        ).textContent =
+            atrasadas;
+
+
+        carregando.style.display =
+            "none";
+
+        conteudo.style.display =
+            "block";
+
+
+    } catch (e) {
+
+        console.error(
+            "Erro ao carregar carnê:",
+            e
+        );
+
+
+        carregando.style.display =
+            "none";
+
+
+        erro.textContent =
+            e.message ||
+            "Não foi possível carregar o carnê.";
+
+
+        erro.style.display =
+            "block";
+
+    }
+
+}
+
+
+/* =========================================================
+   PAGAMENTO DA PARCELA
+========================================================= */
+
+async function abrirPagamentoParcela(parcelaId) {
+
+    if (!parcelaId) {
+        alert("Parcela não identificada.");
+        return;
+    }
+
+    try {
+
+        const resposta = await fetch("/api/cobranca", {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                acao: "criarTokenParcela",
+                parcelaId: String(parcelaId)
+            })
+
+        });
+
+        let resultado = null;
+
+        try {
+            resultado = await resposta.json();
+        } catch (erro) {
+            resultado = null;
+        }
+
+        if (!resposta.ok) {
+
+            throw new Error(
+                resultado && resultado.erro
+                    ? resultado.erro
+                    : "Não foi possível abrir o pagamento."
+            );
+
+        }
+
+        if (
+            !resultado ||
+            !resultado.sucesso ||
+            !resultado.token
+        ) {
+
+            throw new Error(
+                "Não foi possível gerar o acesso para pagamento."
+            );
+
+        }
+
+        /*
+         * O backend cria o token.
+         * O CARNE_SECRET nunca fica no navegador.
+         */
+
+        const token =
+            resultado.token;
+
+        /*
+         * Abre a página de pagamento
+         * sem precisar recarregar o carnê.
+         */
+
+        const novaUrl =
+            window.location.pathname +
+            "?token=" +
+            encodeURIComponent(token);
+
+        window.history.pushState(
+            {
+                token: token
+            },
+            "",
+            novaUrl
+        );
+
+        await abrirPaginaPagamento(token);
+
+        window.scrollTo(0, 0);
+
+    } catch (erro) {
+
+        console.error(
+            "Erro ao abrir pagamento da parcela:",
+            erro
+        );
+
+        alert(
+            erro.message ||
+            "Não foi possível abrir o pagamento."
+        );
+
+    }
+
+}
+
+/* =========================================================
+   INICIALIZAÇÃO
+========================================================= */
+
+/* =========================================================
+   INICIALIZAÇÃO
+========================================================= */
+
+/* =========================================================
+   INICIALIZAÇÃO DO SISTEMA
+========================================================= */
+
+/* =========================================================
+   INICIALIZAÇÃO — páginas públicas
+========================================================= */
+(async function iniciarPaginaPublica() {
+    const parametros =
+        new URLSearchParams(
+            window.location.search
+        );
+    const token =
+        parametros.get("token");
+    const carne =
+        parametros.get("carne");
+
+    /* Pagamento individual (QR Code do carnê em PDF / botão Pagar) */
+    if (token) {
+        abrirPaginaPagamento(token);
+        return;
+    }
+
+    /* Carnê digital */
+    if (carne) {
+        await abrirPaginaCarne(carne);
+    }
+})();
+</script>
+
+</body>
+</html>
