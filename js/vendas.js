@@ -609,7 +609,7 @@ document
         const limitInfo = await window.ZER01AumentoLimite.fetchLimitInfo(clienteId);
 
         if (limitInfo.base === null) {
-          throw new Error('Este cliente ainda não possui limite aprovado. Acesse o Zer01 Score para realizar a análise.');
+          throw new Error('Este cliente ainda não possui limite aprovado. Acesse o EDILMA Score para realizar a análise.');
         }
 
         if (limitInfo.overdueCount > 0) {
