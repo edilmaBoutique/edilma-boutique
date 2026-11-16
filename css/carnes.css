@@ -1,0 +1,11 @@
+/* Carnês — estilos específicos. */
+.carnes-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.carnes-tab{border:1px solid var(--line);background:transparent;color:var(--muted);padding:9px 14px;border-radius:7px;font-size:13px;font-weight:600;transition:.16s var(--ease)}
+.carnes-tab:hover{color:var(--text);border-color:#65707b}
+.carnes-tab.active{color:var(--text);background:var(--amber-soft);border-color:#70552f}
+.carnes-acoes{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.carnes-acoes .btn{padding:7px 11px;font-size:12px}
+.carnes-nome small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.status-semcarne{color:var(--muted);background:rgba(255,255,255,.06)}
+.status-ativo{color:var(--green);background:rgba(78,209,155,.1)}
+.valor-zero{color:var(--muted)}
