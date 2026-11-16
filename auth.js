@@ -14,6 +14,11 @@ const USUARIOS_ZER01 = {
         nome: 'Edilma Boutique'
     },
 
+    'edilmaboutique@gmail.com': {
+        perfil: 'administrador',
+        nome: 'Edilma Boutique'
+    },
+
     'barbadosearrumados02@gmail.com': {
         perfil: 'administrador',
         nome: 'Administrador'

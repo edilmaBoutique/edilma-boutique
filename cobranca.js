@@ -14,48 +14,6 @@ const SUPABASE_URL =
 const SUPABASE_SERVICE_ROLE_KEY =
     process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-/* Chave pública: usada só para validar o login do usuário. */
-const SUPABASE_ANON_KEY =
-    process.env.SUPABASE_ANON_KEY;
-
-/*
-    Chaves novas do Supabase (sb_secret_...) não são JWT:
-    devem ir somente no cabeçalho "apikey". As antigas
-    (service_role em JWT, eyJ...) continuam indo nos dois.
-*/
-function tipoDeChave(chave){
-
-    const t = String(chave || "");
-
-    if(!t){ return "ausente"; }
-    if(t.startsWith("sb_secret_")){ return "sb_secret"; }
-    if(t.startsWith("sb_publishable_")){ return "sb_publishable"; }
-    if(t.startsWith("eyJ")){ return "jwt"; }
-    return "desconhecido";
-
-}
-
-function cabecalhosServico(){
-
-    const cabecalhos = {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY
-    };
-
-    if(
-        !String(
-            SUPABASE_SERVICE_ROLE_KEY || ""
-        ).startsWith("sb_secret_")
-    ){
-
-        cabecalhos["Authorization"] =
-            "Bearer " + SUPABASE_SERVICE_ROLE_KEY;
-
-    }
-
-    return cabecalhos;
-
-}
-
 
 /* =========================================================
    BASE64 URL
@@ -152,7 +110,12 @@ async function supabaseRequest(
 
     const headers = {
 
-        ...cabecalhosServico(),
+        "apikey":
+            SUPABASE_SERVICE_ROLE_KEY,
+
+        "Authorization":
+            "Bearer " +
+            SUPABASE_SERVICE_ROLE_KEY,
 
         "Content-Type":
             "application/json",
@@ -907,77 +870,21 @@ async function verificarUsuario(req){
 
     }
 
-    /*
-        Valida o token do usuário no Supabase Auth. A chave pública
-        (anon/publishable) é a forma padrão; se ela não estiver
-        configurada ou falhar, tenta com a chave de serviço.
-    */
-    const chaves = [];
-    if(SUPABASE_ANON_KEY){
-        chaves.push(SUPABASE_ANON_KEY);
-    }
-    if(
-        SUPABASE_SERVICE_ROLE_KEY &&
-        !chaves.includes(SUPABASE_SERVICE_ROLE_KEY)
-    ){
-        chaves.push(SUPABASE_SERVICE_ROLE_KEY);
-    }
-
-    let resposta = null;
-
-    req.diagAuth = {
-        projetoSupabase:
-            String(SUPABASE_URL)
-                .replace(/^https?:\/\//, "")
-                .split(".")[0],
-        tentativas: []
-    };
-
-    for(const chave of chaves){
-
-        resposta =
-            await fetch(
-                SUPABASE_URL.replace(/\/$/, "") +
-                "/auth/v1/user",
-                {
-                    headers: {
-                        "apikey":
-                            chave,
-                        "Authorization":
-                            "Bearer " + partes[1]
-                    }
+    const resposta =
+        await fetch(
+            SUPABASE_URL.replace(/\/$/, "") +
+            "/auth/v1/user",
+            {
+                headers: {
+                    "apikey":
+                        SUPABASE_SERVICE_ROLE_KEY,
+                    "Authorization":
+                        "Bearer " + partes[1]
                 }
-            );
-
-        let detalhe = "";
-        if(!resposta.ok){
-            try{
-                const corpoErro = await resposta.clone().json();
-                detalhe = String(
-                    corpoErro.msg ||
-                    corpoErro.message ||
-                    corpoErro.error_description ||
-                    corpoErro.error ||
-                    ""
-                ).slice(0, 140);
-            }catch(e){
-                detalhe = "";
             }
-        }
+        );
 
-        req.diagAuth.tentativas.push({
-            chave: tipoDeChave(chave),
-            status: resposta.status,
-            mensagem: detalhe
-        });
-
-        if(resposta.ok){
-            break;
-        }
-
-    }
-
-    if(!resposta || !resposta.ok){
+    if(!resposta.ok){
 
         return null;
 
@@ -1102,12 +1009,6 @@ module.exports = async (
                 if(!usuario){
 
                     return res.status(401).json({
-
-                        diagnostico:
-                            req.diagAuth || {
-                                tentativas: [],
-                                semToken: true
-                            },
 
                         erro:
                             "Sessão inválida ou expirada. Faça login novamente no sistema."

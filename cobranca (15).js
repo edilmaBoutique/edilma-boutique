@@ -1,0 +1,1923 @@
+const crypto = require("crypto");
+
+
+/* =========================================================
+   CONFIGURAÇÕES
+========================================================= */
+
+const CARNE_SECRET =
+    process.env.CARNE_SECRET;
+
+const SUPABASE_URL =
+    process.env.SUPABASE_URL;
+
+const SUPABASE_SERVICE_ROLE_KEY =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+/* Chave pública: usada só para validar o login do usuário. */
+const SUPABASE_ANON_KEY =
+    process.env.SUPABASE_ANON_KEY;
+
+/*
+    Chaves novas do Supabase (sb_secret_...) não são JWT:
+    devem ir somente no cabeçalho "apikey". As antigas
+    (service_role em JWT, eyJ...) continuam indo nos dois.
+*/
+function tipoDeChave(chave){
+
+    const t = String(chave || "");
+
+    if(!t){ return "ausente"; }
+    if(t.startsWith("sb_secret_")){ return "sb_secret"; }
+    if(t.startsWith("sb_publishable_")){ return "sb_publishable"; }
+    if(t.startsWith("eyJ")){ return "jwt"; }
+    return "desconhecido";
+
+}
+
+function cabecalhosServico(){
+
+    const cabecalhos = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY
+    };
+
+    if(
+        !String(
+            SUPABASE_SERVICE_ROLE_KEY || ""
+        ).startsWith("sb_secret_")
+    ){
+
+        cabecalhos["Authorization"] =
+            "Bearer " + SUPABASE_SERVICE_ROLE_KEY;
+
+    }
+
+    return cabecalhos;
+
+}
+
+
+/* =========================================================
+   BASE64 URL
+========================================================= */
+
+function base64urlEncode(text){
+
+    return Buffer.from(text)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");
+
+}
+
+
+function base64urlDecode(text){
+
+    text = text
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+
+    while(text.length % 4){
+
+        text += "=";
+
+    }
+
+    return Buffer.from(
+        text,
+        "base64"
+    ).toString("utf8");
+
+}
+
+
+/* =========================================================
+   ASSINATURA DOS TOKENS ANTIGOS
+========================================================= */
+
+function criarAssinatura(
+    dados,
+    segredo
+){
+
+    return crypto
+        .createHmac(
+            "sha256",
+            segredo
+        )
+        .update(dados)
+        .digest("base64url");
+
+}
+
+
+/* =========================================================
+   VERIFICAR CONFIGURAÇÃO SUPABASE
+========================================================= */
+
+function supabaseConfigurado(){
+
+    return Boolean(
+        SUPABASE_URL &&
+        SUPABASE_SERVICE_ROLE_KEY
+    );
+
+}
+
+
+/* =========================================================
+   REQUEST SUPABASE
+========================================================= */
+
+async function supabaseRequest(
+    tabela,
+    opcoes = {}
+){
+
+    if(!supabaseConfigurado()){
+
+        throw new Error(
+            "Supabase não configurado no Vercel."
+        );
+
+    }
+
+
+    const url =
+        SUPABASE_URL.replace(/\/$/, "") +
+        "/rest/v1/" +
+        tabela;
+
+
+    const headers = {
+
+        ...cabecalhosServico(),
+
+        "Content-Type":
+            "application/json",
+
+        ...(opcoes.headers || {})
+
+    };
+
+
+    const resposta =
+        await fetch(
+            url +
+            (
+                opcoes.query
+                    ? "?" + opcoes.query
+                    : ""
+            ),
+            {
+
+                method:
+                    opcoes.method || "GET",
+
+                headers,
+
+                body:
+                    opcoes.body
+                        ? JSON.stringify(
+                            opcoes.body
+                        )
+                        : undefined
+
+            }
+        );
+
+
+    const texto =
+        await resposta.text();
+
+
+    let dados = null;
+
+
+    if(texto){
+
+        try{
+
+            dados =
+                JSON.parse(texto);
+
+        }catch(e){
+
+            dados =
+                texto;
+
+        }
+
+    }
+
+
+    if(!resposta.ok){
+
+        console.error(
+            "Erro Supabase:",
+            resposta.status,
+            dados
+        );
+
+
+        throw new Error(
+            (
+                dados &&
+                dados.message
+            )
+                ||
+                (
+                    dados &&
+                    dados.error_description
+                )
+                ||
+                "Erro ao consultar o Supabase."
+        );
+
+    }
+
+
+    return dados;
+
+}
+
+
+/* =========================================================
+   GERAR CÓDIGO SEGURO DO CARNÊ
+========================================================= */
+
+function gerarCodigoCarne(){
+
+    return crypto
+        .randomBytes(24)
+        .toString("base64url");
+
+}
+
+
+/* =========================================================
+   BUSCAR CLIENTE
+========================================================= */
+
+async function buscarCliente(
+    clienteId
+){
+
+    const dados =
+        await supabaseRequest(
+            "clientes",
+            {
+
+                query:
+                    "id=eq." +
+                    encodeURIComponent(
+                        clienteId
+                    ) +
+                    "&select=id,nome,cpf_cnpj,telefone,endereco,observacoes,criado_em" +
+                    "&limit=1"
+
+            }
+        );
+
+
+    if(
+        !Array.isArray(dados) ||
+        !dados.length
+    ){
+
+        return null;
+
+    }
+
+
+    return dados[0];
+
+}
+
+
+/* =========================================================
+   BUSCAR CARNÊ DO CLIENTE
+========================================================= */
+
+async function buscarCarnePorCliente(
+    clienteId
+){
+
+    const dados =
+        await supabaseRequest(
+            "carnes",
+            {
+
+                query:
+                    "cliente_id=eq." +
+                    encodeURIComponent(
+                        clienteId
+                    ) +
+                    "&ativo=eq.true" +
+                    "&select=id,cliente_id,venda_id,codigo_acesso,multa,juros,pix,ativo,criado_em" +
+                    "&limit=1"
+
+            }
+        );
+
+
+    if(
+        !Array.isArray(dados) ||
+        !dados.length
+    ){
+
+        return null;
+
+    }
+
+
+    return dados[0];
+
+}
+
+
+/* =========================================================
+   BUSCAR CARNÊ PELO CÓDIGO
+========================================================= */
+
+async function buscarCarnePorCodigo(
+    codigo
+){
+
+    const dados =
+        await supabaseRequest(
+            "carnes",
+            {
+
+                query:
+                    "codigo_acesso=eq." +
+                    encodeURIComponent(
+                        codigo
+                    ) +
+                    "&ativo=eq.true" +
+                    "&select=id,cliente_id,venda_id,codigo_acesso,multa,juros,pix,ativo,criado_em" +
+                    "&limit=1"
+
+            }
+        );
+
+
+    if(
+        !Array.isArray(dados) ||
+        !dados.length
+    ){
+
+        return null;
+
+    }
+
+
+    return dados[0];
+
+}
+
+
+/* =========================================================
+   BUSCAR VENDAS DO CLIENTE
+========================================================= */
+
+async function buscarVendasCliente(
+    clienteId
+){
+
+    const vendas =
+        await supabaseRequest(
+            "vendas",
+            {
+
+                query:
+                    "cliente_id=eq." +
+                    encodeURIComponent(
+                        clienteId
+                    ) +
+                    "&select=id,cliente_id,descricao,valor_total,quantidade_parcelas,data_venda,status,observacoes,criado_em" +
+                    "&order=data_venda.asc,criado_em.asc"
+
+            }
+        );
+
+
+    if(
+        !Array.isArray(vendas)
+    ){
+
+        return [];
+
+    }
+
+
+    return vendas;
+
+}
+
+
+/* =========================================================
+   BUSCAR PARCELAS DAS VENDAS
+========================================================= */
+
+async function buscarParcelasVendas(
+    vendas
+){
+
+    if(
+        !vendas ||
+        !vendas.length
+    ){
+
+        return [];
+
+    }
+
+
+    const ids =
+        vendas.map(
+            venda => venda.id
+        );
+
+
+    const listaIds =
+        ids.join(",");
+
+
+    const parcelas =
+        await supabaseRequest(
+            "parcelas",
+            {
+
+                query:
+                    "venda_id=in.(" +
+                    encodeURIComponent(
+                        listaIds
+                    ) +
+                    ")" +
+                    "&select=id,venda_id,numero,valor,vencimento,status,data_pagamento,valor_pago,pix_txid,pix_copia_cola,pix_qrcode,criado_em" +
+                    "&order=vencimento.asc,numero.asc"
+
+            }
+        );
+
+
+    if(
+        !Array.isArray(parcelas)
+    ){
+
+        return [];
+
+    }
+
+
+    return parcelas;
+
+}
+
+
+/* =========================================================
+   MONTAR CARNÊ DIGITAL
+========================================================= */
+
+async function montarCarneDigital(
+    carne
+){
+
+    if(!carne){
+
+        throw new Error(
+            "Carnê não encontrado."
+        );
+
+    }
+
+
+    const cliente =
+        await buscarCliente(
+            carne.cliente_id
+        );
+
+
+    if(!cliente){
+
+        throw new Error(
+            "Cliente do carnê não encontrado."
+        );
+
+    }
+
+
+    const vendas =
+        await buscarVendasCliente(
+            carne.cliente_id
+        );
+
+
+    const parcelas =
+        await buscarParcelasVendas(
+            vendas
+        );
+
+
+    const vendasComParcelas =
+        vendas.map(
+            venda => {
+
+                const parcelasVenda =
+                    parcelas.filter(
+                        parcela =>
+                            parcela.venda_id ===
+                            venda.id
+                    );
+
+
+                return {
+
+                    ...venda,
+
+                    parcelas:
+                        parcelasVenda
+
+                };
+
+            }
+        );
+
+
+    return {
+
+        sucesso: true,
+
+        carne: {
+
+            id:
+                carne.id,
+
+            codigo_acesso:
+                carne.codigo_acesso,
+
+            multa:
+                Number(
+                    carne.multa || 0
+                ),
+
+            juros:
+                Number(
+                    carne.juros || 0
+                ),
+
+            pix:
+                carne.pix || "",
+
+            ativo:
+                carne.ativo,
+
+            criado_em:
+                carne.criado_em
+
+        },
+
+        cliente: {
+
+            id:
+                cliente.id,
+
+            nome:
+                cliente.nome,
+
+            cpf_cnpj:
+                cliente.cpf_cnpj,
+
+            telefone:
+                cliente.telefone,
+
+            endereco:
+                cliente.endereco,
+
+            observacoes:
+                cliente.observacoes
+
+        },
+
+        vendas:
+            vendasComParcelas,
+
+        parcelas:
+            parcelas
+
+    };
+
+}
+
+
+/* =========================================================
+   CRIAR OU REUTILIZAR CARNÊ
+========================================================= */
+
+async function criarOuBuscarCarne(
+    dados
+){
+
+    const clienteId =
+        String(
+            dados.clienteId || ""
+        ).trim();
+
+
+    if(!clienteId){
+
+        throw new Error(
+            "ID do cliente não informado."
+        );
+
+    }
+
+
+    const cliente =
+        await buscarCliente(
+            clienteId
+        );
+
+
+    if(!cliente){
+
+        throw new Error(
+            "Cliente não encontrado."
+        );
+
+    }
+
+
+    /* =====================================================
+       VERIFICAR SE CLIENTE JÁ POSSUI CARNÊ
+    ===================================================== */
+
+    const carneExistente =
+        await buscarCarnePorCliente(
+            clienteId
+        );
+
+
+    if(carneExistente){
+
+        return {
+
+            carne:
+                carneExistente,
+
+            nova:
+                false
+
+        };
+
+    }
+
+
+    /* =====================================================
+       CONFIGURAÇÕES
+    ===================================================== */
+
+    const multa =
+        Number(
+            dados.multa
+        );
+
+
+    const juros =
+        Number(
+            dados.juros
+        );
+
+
+    const pix =
+        String(
+            dados.pix || ""
+        ).trim();
+
+
+    const multaFinal =
+        Number.isFinite(multa)
+            ? multa
+            : 2;
+
+
+    const jurosFinal =
+        Number.isFinite(juros)
+            ? juros
+            : 0.033;
+
+
+    if(!pix){
+
+        throw new Error(
+            "Chave PIX não informada."
+        );
+
+    }
+
+
+    /* =====================================================
+       GERAR CÓDIGO
+    ===================================================== */
+
+    const codigo =
+        gerarCodigoCarne();
+
+
+    const registro = {
+
+        cliente_id:
+            clienteId,
+
+        venda_id:
+            dados.vendaId || null,
+
+        codigo_acesso:
+            codigo,
+
+        multa:
+            multaFinal,
+
+        juros:
+            jurosFinal,
+
+        pix:
+            pix,
+
+        ativo:
+            true
+
+    };
+
+
+    try{
+
+        const criado =
+            await supabaseRequest(
+                "carnes",
+                {
+
+                    method:
+                        "POST",
+
+                    query:
+                        "select=id,cliente_id,venda_id,codigo_acesso,multa,juros,pix,ativo,criado_em",
+
+                    headers: {
+
+                        "Prefer":
+                            "return=representation"
+
+                    },
+
+                    body:
+                        registro
+
+                }
+            );
+
+
+        if(
+            !Array.isArray(criado) ||
+            !criado.length
+        ){
+
+            throw new Error(
+                "Carnê não foi criado."
+            );
+
+        }
+
+
+        return {
+
+            carne:
+                criado[0],
+
+            nova:
+                true
+
+        };
+
+
+    }catch(erro){
+
+        /*
+            Se outro processo criou o carnê
+            simultaneamente, tentamos buscar
+            novamente pelo cliente.
+        */
+
+        const carneDepois =
+            await buscarCarnePorCliente(
+                clienteId
+            );
+
+
+        if(carneDepois){
+
+            return {
+
+                carne:
+                    carneDepois,
+
+                nova:
+                    false
+
+            };
+
+        }
+
+
+        throw erro;
+
+    }
+
+}
+
+
+/* =========================================================
+   LISTAR CARNÊS ATIVOS
+   usado pelo painel admin
+========================================================= */
+
+async function listarCarnesAtivos(){
+
+    const dados =
+        await supabaseRequest(
+            "carnes",
+            {
+
+                query:
+                    "ativo=eq.true" +
+                    "&select=id,cliente_id,codigo_acesso,ativo"
+
+            }
+        );
+
+
+    return Array.isArray(dados)
+        ? dados
+        : [];
+
+}
+
+
+/* =========================================================
+   AÇÕES PÚBLICAS
+   Usadas pela página do cliente (links já enviados).
+   Todas as outras ações POST exigem login do sistema.
+========================================================= */
+
+const ACOES_PUBLICAS = [
+    "criarTokenParcela"
+];
+
+
+/* =========================================================
+   VERIFICAR USUÁRIO LOGADO NO SISTEMA
+   O front-end envia o token de sessão do Supabase em
+   "Authorization: Bearer ...". Aqui ele é validado no
+   próprio Supabase (a chave de serviço nunca sai do servidor).
+========================================================= */
+
+async function verificarUsuario(req){
+
+    const cabecalho =
+        String(
+            (req.headers && req.headers.authorization) || ""
+        );
+
+    const partes =
+        cabecalho.match(/^Bearer\s+(.+)$/i);
+
+    if(!partes){
+
+        return null;
+
+    }
+
+    if(!supabaseConfigurado()){
+
+        throw new Error(
+            "Supabase não configurado no Vercel."
+        );
+
+    }
+
+    /*
+        Valida o token do usuário no Supabase Auth. A chave pública
+        (anon/publishable) é a forma padrão; se ela não estiver
+        configurada ou falhar, tenta com a chave de serviço.
+    */
+    const chaves = [];
+    if(SUPABASE_ANON_KEY){
+        chaves.push(SUPABASE_ANON_KEY);
+    }
+    if(
+        SUPABASE_SERVICE_ROLE_KEY &&
+        !chaves.includes(SUPABASE_SERVICE_ROLE_KEY)
+    ){
+        chaves.push(SUPABASE_SERVICE_ROLE_KEY);
+    }
+
+    let resposta = null;
+
+    req.diagAuth = {
+        projetoSupabase:
+            String(SUPABASE_URL)
+                .replace(/^https?:\/\//, "")
+                .split(".")[0],
+        tentativas: []
+    };
+
+    for(const chave of chaves){
+
+        resposta =
+            await fetch(
+                SUPABASE_URL.replace(/\/$/, "") +
+                "/auth/v1/user",
+                {
+                    headers: {
+                        "apikey":
+                            chave,
+                        "Authorization":
+                            "Bearer " + partes[1]
+                    }
+                }
+            );
+
+        let detalhe = "";
+        if(!resposta.ok){
+            try{
+                const corpoErro = await resposta.clone().json();
+                detalhe = String(
+                    corpoErro.msg ||
+                    corpoErro.message ||
+                    corpoErro.error_description ||
+                    corpoErro.error ||
+                    ""
+                ).slice(0, 140);
+            }catch(e){
+                detalhe = "";
+            }
+        }
+
+        req.diagAuth.tentativas.push({
+            chave: tipoDeChave(chave),
+            status: resposta.status,
+            mensagem: detalhe
+        });
+
+        if(resposta.ok){
+            break;
+        }
+
+    }
+
+    if(!resposta || !resposta.ok){
+
+        return null;
+
+    }
+
+    const usuario =
+        await resposta.json();
+
+    return (
+        usuario && usuario.id
+            ? usuario
+            : null
+    );
+
+}
+
+
+/* =========================================================
+   LINK PÚBLICO DO CARNÊ
+   Mesmo formato dos links já enviados: /?carne=CODIGO
+========================================================= */
+
+function montarLinkCarne(req, codigo){
+
+    return req.headers.host
+        ? (
+            (
+                req.headers["x-forwarded-proto"]
+                || "https"
+            ) +
+            "://" +
+            req.headers.host +
+            "/?carne=" +
+            encodeURIComponent(codigo)
+        )
+        : null;
+
+}
+
+
+/* =========================================================
+   HANDLER PRINCIPAL
+========================================================= */
+
+module.exports = async (
+    req,
+    res
+) => {
+
+    /*
+        O CARNE_SECRET continua obrigatório
+        porque os tokens antigos de cobrança
+        ainda utilizam essa segurança.
+    */
+
+    if(!CARNE_SECRET){
+
+        return res.status(500).json({
+
+            erro:
+                "Chave de segurança não configurada."
+
+        });
+
+    }
+
+
+    /* =====================================================
+       POST
+    ===================================================== */
+
+    if(req.method === "POST"){
+
+        try{
+
+            let dados =
+                req.body;
+
+
+            if(
+                typeof dados === "string"
+            ){
+
+                dados =
+                    JSON.parse(
+                        dados
+                    );
+
+            }
+
+
+            if(!dados){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Dados não enviados."
+
+                });
+
+            }
+
+
+            /* =============================================
+               AUTENTICAÇÃO
+               Painel/administração exige login do sistema.
+               Ficam públicas somente as ações da página do
+               cliente (ACOES_PUBLICAS) e a leitura via GET.
+            ============================================= */
+
+            if(
+                !ACOES_PUBLICAS.includes(
+                    dados.acao
+                )
+            ){
+
+                const usuario =
+                    await verificarUsuario(
+                        req
+                    );
+
+                if(!usuario){
+
+                    return res.status(401).json({
+
+                        diagnostico:
+                            req.diagAuth || {
+                                tentativas: [],
+                                semToken: true
+                            },
+
+                        erro:
+                            "Sessão inválida ou expirada. Faça login novamente no sistema."
+
+                    });
+
+                }
+
+            }
+
+
+            /* =============================================
+               CONSULTAR CARNÊ DE UM CLIENTE
+               usado pelo botão CARNÊ do sistema
+            ============================================= */
+
+            if(
+                dados.acao ===
+                "consultarCarne"
+            ){
+
+                if(
+                    !supabaseConfigurado()
+                ){
+
+                    return res.status(500).json({
+
+                        erro:
+                            "Supabase não configurado no Vercel."
+
+                    });
+
+                }
+
+                const clienteId =
+                    String(
+                        dados.clienteId || ""
+                    ).trim();
+
+                if(!clienteId){
+
+                    return res.status(400).json({
+
+                        erro:
+                            "ID do cliente não informado."
+
+                    });
+
+                }
+
+                const carneCliente =
+                    await buscarCarnePorCliente(
+                        clienteId
+                    );
+
+                return res.status(200).json({
+
+                    sucesso:
+                        true,
+
+                    carne:
+                        carneCliente || null,
+
+                    link:
+                        carneCliente
+                            ? montarLinkCarne(
+                                req,
+                                carneCliente.codigo_acesso
+                            )
+                            : null
+
+                });
+
+            }
+
+
+            /* =============================================
+               LISTAR CARNÊS
+               painel admin
+            ============================================= */
+
+            if(
+                dados.acao ===
+                "listarCarnes"
+            ){
+
+                if(
+                    !supabaseConfigurado()
+                ){
+
+                    return res.status(500).json({
+
+                        erro:
+                            "Supabase não configurado no Vercel."
+
+                    });
+
+                }
+
+
+                const carnes =
+                    await listarCarnesAtivos();
+
+
+                return res.status(200).json({
+
+                    sucesso:
+                        true,
+
+                    carnes:
+                        carnes
+
+                });
+
+            }
+
+
+            /* =============================================
+               NOVO CARNÊ DIGITAL
+            ============================================= */
+
+            if(
+                dados.acao ===
+                "criarCarne"
+            ){
+
+                if(
+                    !supabaseConfigurado()
+                ){
+
+                    return res.status(500).json({
+
+                        erro:
+                            "Supabase não configurado no Vercel."
+
+                    });
+
+                }
+
+
+                const resultado =
+                    await criarOuBuscarCarne(
+                        dados
+                    );
+
+
+                const link =
+                    montarLinkCarne(
+                        req,
+                        resultado.carne.codigo_acesso
+                    );
+
+
+                return res.status(200).json({
+
+                    sucesso:
+                        true,
+
+                    nova:
+                        resultado.nova,
+
+                    carne:
+                        resultado.carne,
+
+                    link:
+                        link
+
+                });
+
+            }
+
+
+            /* =============================================
+               GERAR TOKEN PARA UMA PARCELA DO CARNÊ DIGITAL
+
+               O segredo permanece somente no backend.
+            ============================================= */
+
+            if(
+                dados.acao ===
+                "criarTokenParcela"
+            ){
+
+                if(
+                    !supabaseConfigurado()
+                ){
+
+                    return res.status(500).json({
+
+                        erro:
+                            "Supabase não configurado no Vercel."
+
+                    });
+
+                }
+
+
+                const parcelaId =
+                    String(
+                        dados.parcelaId || ""
+                    ).trim();
+
+
+                if(!parcelaId){
+
+                    return res.status(400).json({
+
+                        erro:
+                            "ID da parcela não informado."
+
+                    });
+
+                }
+
+
+                const parcelas =
+                    await supabaseRequest(
+                        "parcelas",
+                        {
+
+                            query:
+                                "id=eq." +
+                                encodeURIComponent(
+                                    parcelaId
+                                ) +
+                                "&select=id,venda_id,numero,valor,vencimento,status,data_pagamento,valor_pago" +
+                                "&limit=1"
+
+                        }
+                    );
+
+
+                if(
+                    !Array.isArray(parcelas) ||
+                    !parcelas.length
+                ){
+
+                    return res.status(404).json({
+
+                        erro:
+                            "Parcela não encontrada."
+
+                    });
+
+                }
+
+
+                const parcela =
+                    parcelas[0];
+
+
+                const vendas =
+                    await supabaseRequest(
+                        "vendas",
+                        {
+
+                            query:
+                                "id=eq." +
+                                encodeURIComponent(
+                                    parcela.venda_id
+                                ) +
+                                "&select=id,cliente_id" +
+                                "&limit=1"
+
+                        }
+                    );
+
+
+                if(
+                    !Array.isArray(vendas) ||
+                    !vendas.length
+                ){
+
+                    return res.status(404).json({
+
+                        erro:
+                            "Venda da parcela não encontrada."
+
+                    });
+
+                }
+
+
+                const venda =
+                    vendas[0];
+
+
+                const carne =
+                    await buscarCarnePorCliente(
+                        venda.cliente_id
+                    );
+
+
+                if(!carne){
+
+                    return res.status(404).json({
+
+                        erro:
+                            "Carnê do cliente não encontrado."
+
+                    });
+
+                }
+
+
+                const cliente =
+                    await buscarCliente(
+                        venda.cliente_id
+                    );
+
+
+                if(!cliente){
+
+                    return res.status(404).json({
+
+                        erro:
+                            "Cliente da parcela não encontrado."
+
+                    });
+
+                }
+
+
+                const valorOriginal =
+                    Number(
+                        parcela.valor || 0
+                    );
+
+
+                const valorPago =
+                    Number(
+                        parcela.valor_pago || 0
+                    );
+
+
+                const valorRestante =
+                    Math.max(
+                        0,
+                        valorOriginal - valorPago
+                    );
+
+
+                if(valorRestante <= 0){
+
+                    return res.status(400).json({
+
+                        erro:
+                            "Esta parcela já está totalmente paga."
+
+                    });
+
+                }
+
+
+                const payload =
+                    {
+
+                        cliente:
+                            cliente.nome || "",
+
+                        cpf:
+                            cliente.cpf_cnpj || "",
+
+                        telefone:
+                            cliente.telefone || "",
+
+                        endereco:
+                            cliente.endereco || "",
+
+                        parcela:
+                            String(
+                                parcela.numero || ""
+                            ),
+
+                        vencimento:
+                            parcela.vencimento || "",
+
+                        valor:
+                            valorRestante,
+
+                        multa:
+                            Number(
+                                carne.multa || 0
+                            ),
+
+                        juros:
+                            Number(
+                                carne.juros || 0
+                            ),
+
+                        pix:
+                            carne.pix || "",
+
+                        parcelaId:
+                            parcela.id,
+
+                        criadoEm:
+                            Date.now()
+
+                    };
+
+
+                if(!payload.pix){
+
+                    return res.status(400).json({
+
+                        erro:
+                            "Chave PIX do carnê não informada."
+
+                    });
+
+                }
+
+
+                const dadosCodificados =
+                    base64urlEncode(
+                        JSON.stringify(
+                            payload
+                        )
+                    );
+
+
+                const assinatura =
+                    criarAssinatura(
+                        dadosCodificados,
+                        CARNE_SECRET
+                    );
+
+
+                const token =
+                    dadosCodificados +
+                    "." +
+                    assinatura;
+
+
+                return res.status(200).json({
+
+                    sucesso:
+                        true,
+
+                    token:
+                        token
+
+                });
+
+            }
+
+
+            /* =============================================
+               COBRANÇA ANTIGA
+            ============================================= */
+
+            const payload = {
+
+                cliente:
+                    dados.cliente || "",
+
+                cpf:
+                    dados.cpf || "",
+
+                telefone:
+                    dados.telefone || "",
+
+                endereco:
+                    dados.endereco || "",
+
+                parcela:
+                    dados.parcela || "",
+
+                vencimento:
+                    dados.vencimento || "",
+
+                valor:
+                    Number(
+                        dados.valor || 0
+                    ),
+
+                multa:
+                    Number(
+                        dados.multa || 0
+                    ),
+
+                juros:
+                    Number(
+                        dados.juros || 0
+                    ),
+
+                pix:
+                    dados.pix || "",
+
+                criadoEm:
+                    Date.now()
+
+            };
+
+
+            if(!payload.cliente){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Cliente não informado."
+
+                });
+
+            }
+
+
+            if(!payload.vencimento){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Vencimento não informado."
+
+                });
+
+            }
+
+
+            if(
+                payload.valor <= 0
+            ){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Valor inválido."
+
+                });
+
+            }
+
+
+            if(!payload.pix){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Chave PIX não informada."
+
+                });
+
+            }
+
+
+            const dadosCodificados =
+                base64urlEncode(
+                    JSON.stringify(
+                        payload
+                    )
+                );
+
+
+            const assinatura =
+                criarAssinatura(
+                    dadosCodificados,
+                    CARNE_SECRET
+                );
+
+
+            const token =
+                dadosCodificados +
+                "." +
+                assinatura;
+
+
+            return res.status(200).json({
+
+                sucesso:
+                    true,
+
+                token:
+                    token
+
+            });
+
+
+        }catch(erro){
+
+            console.error(
+                "Erro POST:",
+                erro
+            );
+
+
+            return res.status(500).json({
+
+                erro:
+                    erro.message ||
+                    "Erro ao processar solicitação."
+
+            });
+
+        }
+
+    }
+
+
+    /* =====================================================
+       GET
+    ===================================================== */
+
+    if(req.method === "GET"){
+
+        try{
+
+            /* =============================================
+               CARNÊ DIGITAL
+            ============================================= */
+
+            const codigoCarne =
+                req.query.carne;
+
+
+            if(codigoCarne){
+
+                if(
+                    !supabaseConfigurado()
+                ){
+
+                    return res.status(500).json({
+
+                        erro:
+                            "Supabase não configurado no Vercel."
+
+                    });
+
+                }
+
+
+                const carne =
+                    await buscarCarnePorCodigo(
+                        codigoCarne
+                    );
+
+
+                if(!carne){
+
+                    return res.status(404).json({
+
+                        erro:
+                            "Carnê não encontrado ou desativado."
+
+                    });
+
+                }
+
+
+                const resultado =
+                    await montarCarneDigital(
+                        carne
+                    );
+
+
+                return res.status(200).json(
+                    resultado
+                );
+
+            }
+
+
+            /* =============================================
+               COBRANÇA INDIVIDUAL ANTIGA
+            ============================================= */
+
+            const token =
+                req.query.token;
+
+
+            if(!token){
+
+                return res.status(400).json({
+
+                    erro:
+                        "Token não informado."
+
+                });
+
+            }
+
+
+            const partes =
+                token.split(".");
+
+
+            if(
+                partes.length !== 2
+            ){
+
+                return res.status(401).json({
+
+                    erro:
+                        "Cobrança inválida."
+
+                });
+
+            }
+
+
+            const dadosCodificados =
+                partes[0];
+
+
+            const assinaturaRecebida =
+                partes[1];
+
+
+            const assinaturaEsperada =
+                criarAssinatura(
+                    dadosCodificados,
+                    CARNE_SECRET
+                );
+
+
+            const recebida =
+                Buffer.from(
+                    assinaturaRecebida
+                );
+
+
+            const esperada =
+                Buffer.from(
+                    assinaturaEsperada
+                );
+
+
+            if(
+                recebida.length !==
+                esperada.length
+            ){
+
+                return res.status(401).json({
+
+                    erro:
+                        "Cobrança inválida ou alterada."
+
+                });
+
+            }
+
+
+            const assinaturaValida =
+                crypto.timingSafeEqual(
+                    recebida,
+                    esperada
+                );
+
+
+            if(!assinaturaValida){
+
+                return res.status(401).json({
+
+                    erro:
+                        "Cobrança inválida ou alterada."
+
+                });
+
+            }
+
+
+            const dados =
+                JSON.parse(
+                    base64urlDecode(
+                        dadosCodificados
+                    )
+                );
+
+
+            return res.status(200).json({
+
+                sucesso:
+                    true,
+
+                dados:
+                    dados
+
+            });
+
+
+        }catch(erro){
+
+            console.error(
+                "Erro GET:",
+                erro
+            );
+
+
+            return res.status(500).json({
+
+                erro:
+                    erro.message ||
+                    "Não foi possível processar a solicitação."
+
+            });
+
+        }
+
+    }
+
+
+    /* =====================================================
+       MÉTODO NÃO PERMITIDO
+    ===================================================== */
+
+    return res.status(405).json({
+
+        erro:
+            "Método não permitido."
+
+    });
+
+};
