@@ -72,7 +72,7 @@
       return card.status === 'bloqueado' ? 'Cartão bloqueado.' : 'Cartão cancelado.';
     }
     if (profile.approved == null) {
-      return 'Cliente sem limite aprovado. Faça a análise no Zer01 Score.';
+      return 'Cliente sem limite aprovado. Faça a análise no EDILMA Score.';
     }
     if (profile.overdueCount > 0) {
       return `Cliente com ${profile.overdueCount} parcela(s) vencida(s) em aberto (${fmtMoney(profile.overdueAmount)}).`;
