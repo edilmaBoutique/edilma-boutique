@@ -9,12 +9,12 @@
 
 const USUARIOS_ZER01 = {
 
-    'barbadosearrumados02@gmail.com': {
+    'edilmaboutique02@gmail.com': {
         perfil: 'administrador',
         nome: 'Administrador'
     },
 
-    'contatestewgs05@gmail.com': {
+    'edilmaboutique03@gmail.com': {
         perfil: 'vendedor',
         nome: 'Vendedor'
     }
