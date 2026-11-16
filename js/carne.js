@@ -766,7 +766,7 @@
         pdf.setFontSize(6.5);
 
         pdf.text(
-            "ZER01 MODA MASCULINA",
+            "EDILMA BOUTIQUE MODA FEMININA",
             clienteX,
             y + 91
         );
@@ -1157,7 +1157,7 @@
             String(ctx.cliente.nome || "").trim().split(/\s+/)[0] || "";
         const texto =
             "Olá" + (primeiro ? ", " + primeiro : "") +
-            "! Segue o link do seu carnê da ZER01: " + ctx.link;
+            "! Segue o link do seu carnê da EDILMA BOUTIQUE: " + ctx.link;
         return "https://wa.me/" + numero + "?text=" + encodeURIComponent(texto);
     }
 
